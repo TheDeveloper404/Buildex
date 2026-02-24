@@ -28,8 +28,8 @@ export class DashboardController {
         [tenantId]
       ),
       this.pool.query(
-        'SELECT COUNT(*) FILTER (WHERE acknowledged_at IS NULL) as unacknowledged FROM triggered_alerts WHERE tenant_id = $1',
-        [tenantId]
+        "SELECT COUNT(*) FILTER (WHERE status = 'new') as unacknowledged FROM alerts WHERE tenant_id = $1",
+        [tenantId],
       ),
     ]);
 

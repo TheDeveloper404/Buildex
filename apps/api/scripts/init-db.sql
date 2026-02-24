@@ -162,23 +162,21 @@ CREATE TABLE IF NOT EXISTS alert_rules (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
   material_id UUID REFERENCES materials(id),
-  rule_type VARCHAR(50) NOT NULL,
-  threshold DECIMAL(12, 2),
-  city VARCHAR(100),
+  rule_type VARCHAR(20) NOT NULL CHECK (rule_type IN ('threshold', 'volatility')),
+  params_json JSONB NOT NULL DEFAULT '{}',
   is_active BOOLEAN DEFAULT TRUE,
   created_at TIMESTAMP DEFAULT NOW()
 );
 
--- Triggered Alerts
-CREATE TABLE IF NOT EXISTS triggered_alerts (
+-- Alerts
+CREATE TABLE IF NOT EXISTS alerts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-  alert_rule_id UUID NOT NULL REFERENCES alert_rules(id) ON DELETE CASCADE,
+  rule_id UUID REFERENCES alert_rules(id) ON DELETE CASCADE,
   material_id UUID REFERENCES materials(id),
   triggered_at TIMESTAMP NOT NULL,
-  acknowledged_at TIMESTAMP,
-  acknowledged_by UUID REFERENCES users(id),
-  message TEXT,
+  payload_json JSONB NOT NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'new' CHECK (status IN ('new', 'ack')),
   created_at TIMESTAMP DEFAULT NOW()
 );
 
@@ -223,3 +221,4 @@ CREATE INDEX IF NOT EXISTS idx_price_history_material ON price_history(material_
 CREATE INDEX IF NOT EXISTS idx_price_history_observed ON price_history(observed_at DESC);
 CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, is_read);
 CREATE INDEX IF NOT EXISTS idx_alert_rules_tenant ON alert_rules(tenant_id, is_active);
+CREATE INDEX IF NOT EXISTS idx_alerts_status ON alerts(tenant_id, status);
