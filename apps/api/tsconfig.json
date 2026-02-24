@@ -20,7 +20,8 @@
     "esModuleInterop": true,
     "paths": {
       "@/*": ["src/*"],
-      "@buildex/shared": ["../../packages/shared"]
+      "@buildex/shared": ["../../packages/shared/src/index.ts"],
+      "@buildex/shared/*": ["../../packages/shared/src/*"]
     }
   },
   "include": ["src/**/*"],
