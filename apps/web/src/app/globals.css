@@ -58,24 +58,3 @@
   }
 }
 
-@keyframes page-enter {
-  from {
-    transform: translateY(6px) scale(0.995);
-    filter: blur(1px);
-  }
-  to {
-    transform: translateY(0) scale(1);
-    filter: blur(0);
-  }
-}
-
-.page-transition {
-  animation: page-enter 220ms ease-out;
-  will-change: transform, filter;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .page-transition {
-    animation: none;
-  }
-}
