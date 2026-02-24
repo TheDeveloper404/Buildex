@@ -36,14 +36,6 @@ export class CsrfMiddleware implements NestMiddleware {
       return next();
     }
 
-    // Skip CSRF for dev-login in development
-    if (
-      fullPath.includes('/auth/dev-login') &&
-      process.env.DEV_LOGIN_ENABLED === 'true'
-    ) {
-      return next();
-    }
-
     // Validate CSRF token for state-changing requests
     const cookieToken = req.cookies[CSRF_COOKIE];
     const headerToken = req.headers[CSRF_HEADER] as string;

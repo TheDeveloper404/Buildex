@@ -19,64 +19,6 @@ export class AuthController {
     @Inject(PG_POOL) private readonly pool: Pool,
   ) {}
 
-  @Post('dev-login')
-  @HttpCode(HttpStatus.OK)
-  async devLogin(
-    @Req() req: Request,
-    @Res({ passthrough: true }) res: Response,
-  ) {
-    const devLoginEnabled = this.configService.get('DEV_LOGIN_ENABLED', 'false') === 'true';
-    const isDev = this.configService.get('NODE_ENV', 'development') !== 'production';
-
-    if (!devLoginEnabled && isDev === false) {
-      throw new ForbiddenException('Dev login is disabled');
-    }
-
-    // Find demo tenant and user
-    const tenantResult = await this.pool.query(
-      "SELECT id FROM tenants WHERE name = 'Demo Construction SRL' LIMIT 1"
-    );
-    
-    if (tenantResult.rows.length === 0) {
-      throw new UnauthorizedException('Demo tenant not found. Run seed script first.');
-    }
-
-    const tenantId = tenantResult.rows[0].id;
-
-    const userResult = await this.pool.query(
-      'SELECT id FROM users WHERE tenant_id = $1 AND name = $2 LIMIT 1',
-      [tenantId, 'Demo Admin']
-    );
-
-    if (userResult.rows.length === 0) {
-      throw new UnauthorizedException('Demo user not found. Run seed script first.');
-    }
-
-    const userId = userResult.rows[0].id;
-
-    // Create session
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + SESSION_DURATION_DAYS);
-
-    const session = await this.authService.createSession(userId, tenantId, expiresAt);
-
-    // Set HTTP-only cookie
-    const isSecure = this.configService.get('COOKIE_SECURE', 'false') === 'true';
-    res.cookie(SESSION_COOKIE_NAME, session.id, {
-      httpOnly: true,
-      secure: isSecure,
-      sameSite: 'lax',
-      expires: expiresAt,
-      path: '/',
-    });
-
-    return {
-      success: true,
-      userId: session.userId,
-      tenantId: session.tenantId,
-    };
-  }
-
   @Post('login')
   @HttpCode(HttpStatus.OK)
   async login(

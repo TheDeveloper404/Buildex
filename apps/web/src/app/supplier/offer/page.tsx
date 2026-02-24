@@ -25,7 +25,7 @@ export default function SupplierOfferPage() {
   useEffect(() => {
     if (!token) {
       setLoading(false)
-      setError('No token provided')
+      setError('Token lipsă')
       return
     }
 
@@ -50,7 +50,7 @@ export default function SupplierOfferPage() {
         setLoading(false)
       })
       .catch(() => {
-        setError('Failed to load RFQ context')
+        setError('Nu s-a putut încărca cererea')
         setLoading(false)
       })
   }, [token])
@@ -86,7 +86,7 @@ export default function SupplierOfferPage() {
         setSuccess(true)
       }
     } catch {
-      setError('Failed to submit offer')
+      setError('Nu s-a putut trimite oferta')
     } finally {
       setSubmitting(false)
     }

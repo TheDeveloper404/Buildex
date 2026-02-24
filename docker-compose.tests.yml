@@ -1,0 +1,121 @@
+services:
+  postgres-test:
+    image: postgres:16-alpine
+    container_name: buildex-test-postgres
+    labels:
+      app: buildex
+      component: database
+      service: test-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: buildex_test
+    ports:
+      - "5433:5432"
+    volumes:
+      - buildex-test-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis-test:
+    image: redis:7-alpine
+    container_name: buildex-test-redis
+    labels:
+      app: buildex
+      component: cache
+      service: test-redis
+    ports:
+      - "6380:6379"
+    volumes:
+      - buildex-test-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  api-test:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      labels:
+        app: buildex
+        component: backend
+        service: test-api
+    image: buildex-test-api:latest
+    container_name: buildex-test-api
+    labels:
+      app: buildex
+      component: backend
+      service: test-api
+    environment:
+      NODE_ENV: test
+      PORT: 3003
+      DB_HOST: postgres-test
+      DB_PORT: 5432
+      DB_NAME: buildex_test
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      REDIS_URL: redis://redis-test:6379
+      WEB_URL: http://localhost:3002
+      COOKIE_SECURE: "false"
+      DEV_LOGIN_ENABLED: "true"
+    ports:
+      - "3003:3003"
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+      redis-test:
+        condition: service_healthy
+
+  web-test:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      labels:
+        app: buildex
+        component: frontend
+        service: test-web
+    image: buildex-test-web:latest
+    container_name: buildex-test-web
+    labels:
+      app: buildex
+      component: frontend
+      service: test-web
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: http://localhost:3003/api
+      API_INTERNAL_URL: http://api-test:3003/api
+    ports:
+      - "3002:3000"
+    depends_on:
+      - api-test
+
+  playwright:
+    image: mcr.microsoft.com/playwright:v1.49.0-noble
+    container_name: buildex-test-playwright
+    labels:
+      app: buildex
+      component: test-runner
+      service: playwright
+    volumes:
+      - ./tests:/app/tests
+      - buildex-test-results:/app/test-results
+    working_dir: /app
+    environment:
+      TEST_BASE_URL: http://web-test:3000
+      PLAYWRIGHT_REPORT: /app/test-results
+    command: bash -c "npx playwright install --with-deps && npx playwright test"
+    depends_on:
+      - web-test
+
+volumes:
+  buildex-test-postgres-data:
+    name: buildex-test-postgres-data
+  buildex-test-redis-data:
+    name: buildex-test-redis-data
+  buildex-test-results:
+    name: buildex-test-results

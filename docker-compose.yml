@@ -55,7 +55,7 @@ services:
       service: api
     environment:
       NODE_ENV: development
-      PORT: 4000
+      PORT: 3001
       DB_HOST: postgres
       DB_PORT: 5432
       DB_NAME: buildex
@@ -66,7 +66,7 @@ services:
       COOKIE_SECURE: "false"
       DEV_LOGIN_ENABLED: "true"
     ports:
-      - "4000:4000"
+      - "3001:3001"
     depends_on:
       postgres:
         condition: service_healthy
@@ -91,8 +91,8 @@ services:
       service: web
     environment:
       NODE_ENV: production
-      NEXT_PUBLIC_API_URL: http://localhost:4000/api
-      API_INTERNAL_URL: http://api:4000/api
+      NEXT_PUBLIC_API_URL: http://localhost:3001/api
+      API_INTERNAL_URL: http://api:3001/api
     ports:
       - "3000:3000"
     depends_on:

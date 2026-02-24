@@ -16,7 +16,6 @@
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "typecheck": "tsc --noEmit",
     "db:migrate": "node scripts/migrate.js",
-    "db:seed": "node scripts/seed.js",
     "db:reset": "node scripts/reset.js"
   },
   "dependencies": {

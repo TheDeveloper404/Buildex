@@ -93,24 +93,11 @@ export default function LoginPage() {
             <p className="text-slate-500 text-sm">
               Nu ai cont?{' '}
               <Link href="/signup" className="text-blue-600 hover:text-blue-500 font-medium">
-                Creează cont
+                creează cont
               </Link>
             </p>
           </div>
-
-          <div className="mt-4 pt-4 border-t border-slate-100">
-            <Link
-              href="/dev-login"
-              className="block text-center text-sm text-slate-400 hover:text-slate-600"
-            >
-              Acces demo (doar development)
-            </Link>
-          </div>
         </div>
-
-        <p className="text-center text-slate-400 text-xs mt-6">
-          Demo: admin@democonstruction.ro / demo1234
-        </p>
       </div>
     </div>
   )

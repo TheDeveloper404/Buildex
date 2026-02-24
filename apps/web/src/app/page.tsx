@@ -74,7 +74,7 @@ export default function HomePage() {
 
         {/* CTA */}
         <div className="pb-20 text-center">
-          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-6">
+          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
             <Link 
               href="/login"
               className="inline-flex items-center px-8 py-3.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-semibold text-lg shadow-lg shadow-blue-600/25 transition-all hover:shadow-blue-500/40 hover:-translate-y-0.5"
@@ -88,18 +88,6 @@ export default function HomePage() {
               Creează Cont
             </Link>
           </div>
-          
-          <div className="mt-4 pt-4 border-t border-slate-700/50">
-            <Link 
-              href="/dev-login"
-              className="text-sm text-slate-500 hover:text-slate-400 transition-colors"
-            >
-              🔧 Mod Demo (fără cont) - pentru testare
-            </Link>
-          </div>
-          <p className="mt-2 text-xs text-slate-600">
-            Demo: admin@democonstruction.ro / demo1234
-          </p>
         </div>
       </div>
     </main>
