@@ -1,0 +1,112 @@
+name: Build and Deploy to Azure
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  REGISTRY_NAME: buildex${{ github.run_id }}
+  RESOURCE_GROUP: buildex-rg
+  LOCATION: westeurope
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build shared package
+        run: npm run build --workspace=packages/shared
+
+      - name: Build API
+        run: npm run build --workspace=apps/api
+
+      - name: Build Web
+        run: npm run build --workspace=apps/web
+
+      - name: Run tests
+        run: npm test --workspaces --if-present
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy Bicep Template
+        uses: azure/arm-deploy@v1
+        with:
+          subscriptionId: ${{ secrets.AZURE_SUBSCRIPTION }}
+          resourceGroupName: ${{ env.RESOURCE_GROUP }}
+          template: ./infrastructure/azure/main.bicep
+          parameters: >
+            {
+              "environmentName": "buildex",
+              "dbAdminPassword": "${{ secrets.DB_ADMIN_PASSWORD }}"
+            }
+          failOnStdErr: false
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Azure Container Registry
+        uses: azure/docker-login@v1
+        with:
+          login-server: ${{ env.REGISTRY_NAME }}.azurecr.io
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+
+      - name: Build and push API image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./apps/api/Dockerfile
+          push: true
+          tags: ${{ env.REGISTRY_NAME }}.azurecr.io/buildex-api:latest,${{ env.REGISTRY_NAME }}.azurecr.io/buildex-api:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push Web image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./apps/web/Dockerfile
+          push: true
+          tags: ${{ env.REGISTRY_NAME }}.azurecr.io/buildex-web:latest,${{ env.REGISTRY_NAME }}.azurecr.io/buildex-web:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Deploy API to Container Apps
+        uses: azure/container-apps-deploy-action@v1
+        with:
+          appSourcePath: .
+          acrName: ${{ env.REGISTRY_NAME }}
+          containerAppName: buildex-api
+          resourceGroup: ${{ env.RESOURCE_GROUP }}
+          imageToDeploy: ${{ env.REGISTRY_NAME }}.azurecr.io/buildex-api:${{ github.sha }}
+
+      - name: Deploy Web to Container Apps
+        uses: azure/container-apps-deploy-action@v1
+        with:
+          appSourcePath: .
+          acrName: ${{ env.REGISTRY_NAME }}
+          containerAppName: buildex-web
+          resourceGroup: ${{ env.RESOURCE_GROUP }}
+          imageToDeploy: ${{ env.REGISTRY_NAME }}.azurecr.io/buildex-web:${{ github.sha }}

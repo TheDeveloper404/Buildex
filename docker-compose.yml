@@ -1,0 +1,105 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: buildex-postgres
+    labels:
+      app: buildex
+      component: database
+      service: postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: buildex
+    ports:
+      - "5432:5432"
+    expose:
+      - "5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: buildex-redis
+    labels:
+      app: buildex
+      component: cache
+      service: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      labels:
+        app: buildex
+        component: backend
+        service: api
+    image: buildex-api:latest
+    container_name: buildex-api
+    labels:
+      app: buildex
+      component: backend
+      service: api
+    environment:
+      NODE_ENV: development
+      PORT: 4000
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: buildex
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      REDIS_URL: redis://redis:6379
+      WEB_URL: http://localhost:3000
+      COOKIE_SECURE: "false"
+      DEV_LOGIN_ENABLED: "true"
+    ports:
+      - "4000:4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./apps/api/scripts:/app/apps/api/scripts
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      labels:
+        app: buildex
+        component: frontend
+        service: web
+    image: buildex-web:latest
+    container_name: buildex-web
+    labels:
+      app: buildex
+      component: frontend
+      service: web
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: http://localhost:4000/api
+      API_INTERNAL_URL: http://api:4000/api
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
+volumes:
+  postgres_data:
+    name: buildex-postgres-data
+  redis_data:
+    name: buildex-redis-data
