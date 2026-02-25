@@ -13,7 +13,7 @@ async function bootstrap() {
 
   // CORS configuration
   app.enableCors({
-    origin: process.env.WEB_URL || 'http://localhost:3000',
+    origin: process.env.WEB_URL || 'http://localhost:3100',
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],
@@ -25,7 +25,10 @@ async function bootstrap() {
   // Global prefix
   app.setGlobalPrefix('api');
 
-  const port = process.env.PORT || 4000;
+  const defaultPort = process.env.PORT_BASE
+    ? Number(process.env.PORT_BASE) + 1
+    : 3101;
+  const port = process.env.PORT || defaultPort;
   await app.listen(port);
   console.log(`API server running on port ${port}`);
 }

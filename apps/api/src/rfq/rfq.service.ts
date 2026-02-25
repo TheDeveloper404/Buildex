@@ -162,7 +162,7 @@ export class RfqService {
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + 14); // 14 days expiration
 
-      const webUrl = this.configService.get('WEB_URL', 'http://localhost:3000');
+      const webUrl = this.configService.get('WEB_URL', 'http://localhost:3100');
 
       for (const supplier of suppliers) {
         // Generate secure token

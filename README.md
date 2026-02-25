@@ -81,8 +81,8 @@ npm run db:seed
 ```
 
 6. Access the application:
-- Web: http://localhost:3000
-- API: http://localhost:4000/api
+- Web: http://localhost:3100
+- API: http://localhost:3101/api
 - Click "Enter Demo Mode" to access without credentials
 
 ### Development Mode
@@ -190,7 +190,8 @@ az acr build --registry <registry-name> --image buildex-web:latest --file apps/w
 
 ### API (`apps/api/.env`)
 - `NODE_ENV` - development/production
-- `PORT` - API port (default: 4000)
+- `PORT` - API port (default: 3101)
+- `PORT_BASE` - Base port used to derive defaults (API defaults to `PORT_BASE + 1`)
 - `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` - Database connection
 - `REDIS_URL` - Redis connection string
 - `WEB_URL` - Frontend URL for CORS

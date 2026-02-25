@@ -55,18 +55,18 @@ services:
       service: api
     environment:
       NODE_ENV: development
-      PORT: 3001
+      PORT: 3101
       DB_HOST: postgres
       DB_PORT: 5432
       DB_NAME: buildex
       DB_USER: postgres
       DB_PASSWORD: postgres
       REDIS_URL: redis://redis:6379
-      WEB_URL: http://localhost:3000
+      WEB_URL: http://localhost:3100
       COOKIE_SECURE: "false"
       DEV_LOGIN_ENABLED: "true"
     ports:
-      - "3001:3001"
+      - "3101:3101"
     depends_on:
       postgres:
         condition: service_healthy
@@ -91,10 +91,10 @@ services:
       service: web
     environment:
       NODE_ENV: production
-      NEXT_PUBLIC_API_URL: http://localhost:3001/api
-      API_INTERNAL_URL: http://api:3001/api
+      NEXT_PUBLIC_API_URL: http://localhost:3101/api
+      API_INTERNAL_URL: http://api:3101/api
     ports:
-      - "3000:3000"
+      - "3100:3000"
     depends_on:
       - api
 

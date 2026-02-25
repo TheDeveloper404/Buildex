@@ -20,7 +20,7 @@ RUN npm run build --workspace=packages/shared
 
 # Build web app
 ENV NEXT_TELEMETRY_DISABLED=1
-ARG API_INTERNAL_URL=http://api:4000/api
+ARG API_INTERNAL_URL=http://api:3101/api
 ENV API_INTERNAL_URL=${API_INTERNAL_URL}
 RUN npm run build --workspace=apps/web
 
@@ -31,7 +31,7 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
-ENV API_INTERNAL_URL=http://api:4000/api
+ENV API_INTERNAL_URL=http://api:3101/api
 
 # Copy package files
 COPY package*.json ./
