@@ -128,10 +128,10 @@ buildex/
 ├── packages/
 │   └── shared/        # Shared TypeScript types
 ├── tests/
+│   ├── config/        # Configs + docker compose pentru teste
 │   ├── components/    # Vitest tests
 │   └── e2e/          # Playwright tests
 ├── docker-compose.yml
-├── docker-compose.tests.yml
 └── docs/
     └── checklist.md   # Acest document
 ```

@@ -28,12 +28,11 @@ npm-debug.log*
 # Coverage
 coverage/
 tests/
+tests/config/
 
 # Playwright
 test-results/
 playwright-report/
-docker-compose.tests.yml
-docker-compose.vitest.yml
 
 # Misc
 *.tsbuildinfo
