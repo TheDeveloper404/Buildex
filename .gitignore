@@ -32,6 +32,8 @@ tests/
 # Playwright
 test-results/
 playwright-report/
+docker-compose.tests.yml
+docker-compose.vitest.yml
 
 # Misc
 *.tsbuildinfo
