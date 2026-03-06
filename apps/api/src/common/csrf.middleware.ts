@@ -9,11 +9,6 @@ const SAFE_METHODS = ['GET', 'HEAD', 'OPTIONS'];
 @Injectable()
 export class CsrfMiddleware implements NestMiddleware {
   use(req: Request, res: Response, next: NextFunction) {
-    // Skip CSRF for test environment
-    if (process.env.NODE_ENV === 'test') {
-      return next();
-    }
-
     // Skip CSRF for safe methods
     if (SAFE_METHODS.includes(req.method)) {
       // Generate and set CSRF token if not present
@@ -32,7 +27,7 @@ export class CsrfMiddleware implements NestMiddleware {
     const fullPath = req.originalUrl || req.path;
 
     // Skip CSRF for public supplier endpoints (token-based auth)
-    if (fullPath.includes('/supplier/')) {
+    if (fullPath.startsWith('/api/supplier/') || fullPath.startsWith('/supplier/')) {
       return next();
     }
 

@@ -43,6 +43,6 @@ COPY apps/api/scripts ./apps/api/scripts
 
 WORKDIR /app/apps/api
 
-EXPOSE 4000
+EXPOSE 3101
 
 CMD ["sh", "-c", "node scripts/migrate.js && node dist/apps/api/src/main.js"]

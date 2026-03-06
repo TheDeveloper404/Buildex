@@ -27,8 +27,6 @@ export class AllExceptionsFilter implements ExceptionFilter {
         typeof exceptionResponse === 'string'
           ? exceptionResponse
           : (exceptionResponse as any).message || exception.message;
-    } else if (exception instanceof Error) {
-      message = exception.message;
     }
 
     if (status >= 500) {

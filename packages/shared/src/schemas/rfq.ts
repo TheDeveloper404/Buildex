@@ -53,7 +53,6 @@ export const SupplierInviteSchema = z.object({
   id: z.string().uuid(),
   rfqId: z.string().uuid(),
   supplierId: z.string().uuid(),
-  tokenHash: z.string(),
   expiresAt: z.date(),
   status: SupplierInviteStatusSchema,
   createdAt: z.date(),

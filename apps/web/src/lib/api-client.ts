@@ -1,5 +1,13 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api';
 
+const SAFE_METHODS = ['GET', 'HEAD', 'OPTIONS'];
+
+function getCsrfToken(): string | null {
+  if (typeof document === 'undefined') return null;
+  const match = document.cookie.match(/(?:^|;\s*)_csrf=([^;]*)/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
 interface FetchOptions extends RequestInit {
   params?: Record<string, string>;
 }
@@ -20,11 +28,19 @@ class ApiClient {
       url += `?${searchParams.toString()}`;
     }
 
+    const method = (fetchOptions.method || 'GET').toUpperCase();
+    const csrfHeaders: Record<string, string> = {};
+    if (!SAFE_METHODS.includes(method)) {
+      const csrf = getCsrfToken();
+      if (csrf) csrfHeaders['x-csrf-token'] = csrf;
+    }
+
     const response = await fetch(url, {
       ...fetchOptions,
       credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
+        ...csrfHeaders,
         ...fetchOptions.headers,
       },
     });

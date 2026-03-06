@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, Query, Req, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Query, Req, UseGuards, NotFoundException } from '@nestjs/common';
 import { Request } from 'express';
 import { MaterialsService } from './materials.service';
 import { AuthGuard } from '../auth/auth.guard';
@@ -29,7 +29,7 @@ export class MaterialsController {
   ) {
     const material = await this.materialsService.findById(id, req.context.tenantId!);
     if (!material) {
-      return { error: 'Material not found' };
+      throw new NotFoundException('Material not found');
     }
     return material;
   }
@@ -43,7 +43,7 @@ export class MaterialsController {
       canonicalName: data.canonicalName,
       unit: data.unit,
       specJson: data.specJson,
-    });
+    }, req.context.userId);
   }
 
   @Put(':id')
@@ -52,7 +52,7 @@ export class MaterialsController {
     @Req() req: Request & { context: RequestContext },
     @Body() data: { canonicalName?: string; unit?: string; specJson?: Record<string, any> },
   ) {
-    return this.materialsService.update(id, req.context.tenantId!, data);
+    return this.materialsService.update(id, req.context.tenantId!, data, req.context.userId);
   }
 
   @Delete(':id')
@@ -60,7 +60,7 @@ export class MaterialsController {
     @Param('id') id: string,
     @Req() req: Request & { context: RequestContext },
   ) {
-    await this.materialsService.delete(id, req.context.tenantId!);
+    await this.materialsService.delete(id, req.context.tenantId!, req.context.userId);
     return { success: true };
   }
 
@@ -81,7 +81,7 @@ export class MaterialsController {
     return this.materialsService.createAlias(req.context.tenantId!, {
       aliasText: data.aliasText,
       materialId: id,
-    });
+    }, req.context.userId);
   }
 
   @Delete(':id/aliases/:aliasId')
@@ -89,7 +89,7 @@ export class MaterialsController {
     @Param('aliasId') aliasId: string,
     @Req() req: Request & { context: RequestContext },
   ) {
-    await this.materialsService.deleteAlias(aliasId, req.context.tenantId!);
+    await this.materialsService.deleteAlias(aliasId, req.context.tenantId!, req.context.userId);
     return { success: true };
   }
 }

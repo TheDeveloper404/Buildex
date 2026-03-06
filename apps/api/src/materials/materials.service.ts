@@ -2,10 +2,14 @@ import { Injectable, Inject, NotFoundException } from '@nestjs/common';
 import { Pool } from 'pg';
 import { PG_POOL } from '../database/database.module';
 import { Material, MaterialCreate, MaterialUpdate, MaterialAlias, MaterialAliasCreate } from '@buildex/shared';
+import { AuditLogService } from '../audit-log/audit-log.service';
 
 @Injectable()
 export class MaterialsService {
-  constructor(@Inject(PG_POOL) private readonly pool: Pool) {}
+  constructor(
+    @Inject(PG_POOL) private readonly pool: Pool,
+    private readonly auditLog: AuditLogService,
+  ) {}
 
   async findAll(tenantId: string): Promise<Material[]> {
     const result = await this.pool.query(
@@ -24,55 +28,53 @@ export class MaterialsService {
     return this.mapMaterialRow(result.rows[0]);
   }
 
-  async create(tenantId: string, data: MaterialCreate): Promise<Material> {
+  async create(tenantId: string, data: MaterialCreate, actorUserId?: string): Promise<Material> {
     const result = await this.pool.query(
       'INSERT INTO materials (tenant_id, canonical_name, unit, spec_json) VALUES ($1, $2, $3, $4) RETURNING *',
       [tenantId, data.canonicalName, data.unit, data.specJson ? JSON.stringify(data.specJson) : null]
     );
-    return this.mapMaterialRow(result.rows[0]);
+    const material = this.mapMaterialRow(result.rows[0]);
+    this.auditLog.log({
+      tenantId, actorUserId, action: 'create', entityType: 'material', entityId: material.id,
+      metadata: { canonicalName: material.canonicalName, unit: material.unit },
+    }).catch(() => {});
+    return material;
   }
 
-  async update(id: string, tenantId: string, data: MaterialUpdate): Promise<Material> {
+  async update(id: string, tenantId: string, data: MaterialUpdate, actorUserId?: string): Promise<Material> {
     const existing = await this.findById(id, tenantId);
-    if (!existing) {
-      throw new NotFoundException('Material not found');
-    }
+    if (!existing) throw new NotFoundException('Material not found');
 
     const updates: string[] = [];
     const values: any[] = [];
     let paramIndex = 1;
 
-    if (data.canonicalName !== undefined) {
-      updates.push(`canonical_name = $${paramIndex++}`);
-      values.push(data.canonicalName);
-    }
-    if (data.unit !== undefined) {
-      updates.push(`unit = $${paramIndex++}`);
-      values.push(data.unit);
-    }
-    if (data.specJson !== undefined) {
-      updates.push(`spec_json = $${paramIndex++}`);
-      values.push(JSON.stringify(data.specJson));
-    }
+    if (data.canonicalName !== undefined) { updates.push(`canonical_name = $${paramIndex++}`); values.push(data.canonicalName); }
+    if (data.unit !== undefined) { updates.push(`unit = $${paramIndex++}`); values.push(data.unit); }
+    if (data.specJson !== undefined) { updates.push(`spec_json = $${paramIndex++}`); values.push(JSON.stringify(data.specJson)); }
 
-    if (updates.length === 0) {
-      return existing;
-    }
+    if (updates.length === 0) return existing;
 
     values.push(id, tenantId);
     const query = `UPDATE materials SET ${updates.join(', ')} WHERE id = $${paramIndex++} AND tenant_id = $${paramIndex} RETURNING *`;
     const result = await this.pool.query(query, values);
-    return this.mapMaterialRow(result.rows[0]);
+    const material = this.mapMaterialRow(result.rows[0]);
+    this.auditLog.log({
+      tenantId, actorUserId, action: 'update', entityType: 'material', entityId: id,
+      metadata: data,
+    }).catch(() => {});
+    return material;
   }
 
-  async delete(id: string, tenantId: string): Promise<void> {
+  async delete(id: string, tenantId: string, actorUserId?: string): Promise<void> {
     const result = await this.pool.query(
       'DELETE FROM materials WHERE id = $1 AND tenant_id = $2',
       [id, tenantId]
     );
-    if (result.rowCount === 0) {
-      throw new NotFoundException('Material not found');
-    }
+    if (result.rowCount === 0) throw new NotFoundException('Material not found');
+    this.auditLog.log({
+      tenantId, actorUserId, action: 'delete', entityType: 'material', entityId: id,
+    }).catch(() => {});
   }
 
   async findAliases(materialId: string, tenantId: string): Promise<MaterialAlias[]> {
@@ -83,29 +85,35 @@ export class MaterialsService {
     return result.rows.map(row => this.mapAliasRow(row));
   }
 
-  async createAlias(tenantId: string, data: MaterialAliasCreate): Promise<MaterialAlias> {
+  async createAlias(tenantId: string, data: MaterialAliasCreate, actorUserId?: string): Promise<MaterialAlias> {
     const result = await this.pool.query(
       'INSERT INTO material_aliases (tenant_id, alias_text, material_id) VALUES ($1, $2, $3) RETURNING *',
       [tenantId, data.aliasText, data.materialId]
     );
-    return this.mapAliasRow(result.rows[0]);
+    const alias = this.mapAliasRow(result.rows[0]);
+    this.auditLog.log({
+      tenantId, actorUserId, action: 'create', entityType: 'material_alias', entityId: alias.id,
+      metadata: { materialId: data.materialId, aliasText: data.aliasText },
+    }).catch(() => {});
+    return alias;
   }
 
-  async deleteAlias(id: string, tenantId: string): Promise<void> {
+  async deleteAlias(id: string, tenantId: string, actorUserId?: string): Promise<void> {
     const result = await this.pool.query(
       'DELETE FROM material_aliases WHERE id = $1 AND tenant_id = $2',
       [id, tenantId]
     );
-    if (result.rowCount === 0) {
-      throw new NotFoundException('Alias not found');
-    }
+    if (result.rowCount === 0) throw new NotFoundException('Alias not found');
+    this.auditLog.log({
+      tenantId, actorUserId, action: 'delete', entityType: 'material_alias', entityId: id,
+    }).catch(() => {});
   }
 
   async searchByAlias(tenantId: string, searchTerm: string): Promise<Material[]> {
     const result = await this.pool.query(
-      `SELECT DISTINCT m.* FROM materials m 
-       LEFT JOIN material_aliases ma ON m.id = ma.material_id 
-       WHERE m.tenant_id = $1 
+      `SELECT DISTINCT m.* FROM materials m
+       LEFT JOIN material_aliases ma ON m.id = ma.material_id
+       WHERE m.tenant_id = $1
        AND (m.canonical_name ILIKE $2 OR ma.alias_text ILIKE $2)
        ORDER BY m.canonical_name`,
       [tenantId, `%${searchTerm}%`]

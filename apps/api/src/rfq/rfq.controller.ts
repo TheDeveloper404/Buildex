@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, Req, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Req, UseGuards, NotFoundException } from '@nestjs/common';
 import { Request } from 'express';
 import { RfqService } from './rfq.service';
 import { AuthGuard } from '../auth/auth.guard';
@@ -20,20 +20,18 @@ export class RfqController {
     @Req() req: Request & { context: RequestContext },
   ) {
     const rfq = await this.rfqService.findById(id, req.context.tenantId!);
-    if (!rfq) {
-      return { error: 'RFQ not found' };
-    }
-    const items = await this.rfqService.findItems(id);
-    const invites = await this.rfqService.findInvites(id);
+    if (!rfq) throw new NotFoundException('RFQ not found');
+    const items = await this.rfqService.findItems(id, req.context.tenantId!);
+    const invites = await this.rfqService.findInvites(id, req.context.tenantId!);
     return { ...rfq, items, invites };
   }
 
   @Post()
   async create(
     @Req() req: Request & { context: RequestContext },
-    @Body() data: { 
-      projectName: string; 
-      deliveryCity: string; 
+    @Body() data: {
+      projectName: string;
+      deliveryCity: string;
       desiredDate?: Date;
       items: { materialId: string; qty: number; notes?: string }[];
     },
@@ -43,7 +41,7 @@ export class RfqController {
       deliveryCity: data.deliveryCity,
       desiredDate: data.desiredDate,
       items: data.items,
-    });
+    }, req.context.userId);
   }
 
   @Put(':id')
@@ -52,7 +50,7 @@ export class RfqController {
     @Req() req: Request & { context: RequestContext },
     @Body() data: { projectName?: string; deliveryCity?: string; desiredDate?: Date | null },
   ) {
-    return this.rfqService.update(id, req.context.tenantId!, data);
+    return this.rfqService.update(id, req.context.tenantId!, data, req.context.userId);
   }
 
   @Delete(':id')
@@ -60,7 +58,7 @@ export class RfqController {
     @Param('id') id: string,
     @Req() req: Request & { context: RequestContext },
   ) {
-    await this.rfqService.delete(id, req.context.tenantId!);
+    await this.rfqService.delete(id, req.context.tenantId!, req.context.userId);
     return { success: true };
   }
 
@@ -70,6 +68,6 @@ export class RfqController {
     @Req() req: Request & { context: RequestContext },
     @Body() data: { supplierIds: string[] },
   ) {
-    return this.rfqService.sendRfq(id, req.context.tenantId!, data.supplierIds);
+    return this.rfqService.sendRfq(id, req.context.tenantId!, data.supplierIds, req.context.userId);
   }
 }

@@ -5,10 +5,6 @@ import { RequestContext } from '../common/request-context';
 @Injectable()
 export class AuthGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
-    if (process.env.NODE_ENV === 'test') {
-      return true;
-    }
-
     const request = context.switchToHttp().getRequest<Request & { context: RequestContext }>();
     
     if (!request.context.userId) {

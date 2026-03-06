@@ -101,6 +101,10 @@ CREATE TABLE IF NOT EXISTS supplier_invites (
 -- Create index on token_hash for lookups
 CREATE INDEX IF NOT EXISTS idx_supplier_invites_token ON supplier_invites(token_hash);
 
+-- Add token_selector for O(1) token lookup (indexed plain-text prefix, first 16 chars of token)
+ALTER TABLE IF EXISTS supplier_invites ADD COLUMN IF NOT EXISTS token_selector VARCHAR(16) NULL;
+CREATE INDEX IF NOT EXISTS idx_supplier_invites_token_selector ON supplier_invites(token_selector);
+
 -- Offers table
 CREATE TABLE IF NOT EXISTS offers (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -230,10 +234,10 @@ CREATE TABLE IF NOT EXISTS bullmq_jobs (
 
 -- Migration fixes for existing tables (idempotent, safe to run on fresh DB)
 ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255) NULL;
-ALTER TABLE IF EXISTS alert_rules ADD COLUMN IF NOT EXISTS rule_type VARCHAR(20) CHECK (rule_type IN ('price_above', 'price_below', 'volatility'));
+-- Note: rule_type, is_active are already defined in CREATE TABLE above.
+-- threshold and city are legacy columns kept for older DB instances.
 ALTER TABLE IF EXISTS alert_rules ADD COLUMN IF NOT EXISTS threshold DECIMAL(15, 4) NULL;
 ALTER TABLE IF EXISTS alert_rules ADD COLUMN IF NOT EXISTS city VARCHAR(50) NULL;
-ALTER TABLE IF EXISTS alert_rules ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
 `;
 
 async function runMigrations() {

@@ -1,4 +1,4 @@
-import { Injectable, Inject } from '@nestjs/common';
+import { Injectable, Inject, BadRequestException } from '@nestjs/common';
 import { Pool } from 'pg';
 import { PG_POOL } from '../database/database.module';
 import { AlertRule, Alert } from '@buildex/shared';
@@ -20,6 +20,11 @@ export class AlertsService {
     tenantId: string,
     data: { materialId?: string; ruleType: string; params: Record<string, any> },
   ): Promise<AlertRule> {
+    const VALID_RULE_TYPES = ['threshold', 'volatility'];
+    if (!VALID_RULE_TYPES.includes(data.ruleType)) {
+      throw new BadRequestException(`Invalid rule type. Must be one of: ${VALID_RULE_TYPES.join(', ')}`);
+    }
+
     const id = uuid();
     const result = await this.pool.query(
       `INSERT INTO alert_rules (id, tenant_id, material_id, rule_type, params_json)
@@ -93,8 +98,8 @@ export class AlertsService {
 
     if (triggered) {
       await this.pool.query(
-        `INSERT INTO alerts (id, tenant_id, rule_id, material_id, payload_json, status)
-         VALUES ($1, $2, $3, $4, $5, 'new')`,
+        `INSERT INTO alerts (id, tenant_id, rule_id, material_id, triggered_at, payload_json, status)
+         VALUES ($1, $2, $3, $4, NOW(), $5, 'new')`,
         [uuid(), tenantId, rule.id, rule.materialId, JSON.stringify(payload)],
       );
     }
@@ -123,8 +128,8 @@ export class AlertsService {
 
     if (volatility > params.volatilityThreshold) {
       await this.pool.query(
-        `INSERT INTO alerts (id, tenant_id, rule_id, material_id, payload_json, status)
-         VALUES ($1, $2, $3, $4, $5, 'new')`,
+        `INSERT INTO alerts (id, tenant_id, rule_id, material_id, triggered_at, payload_json, status)
+         VALUES ($1, $2, $3, $4, NOW(), $5, 'new')`,
         [
           uuid(),
           tenantId,

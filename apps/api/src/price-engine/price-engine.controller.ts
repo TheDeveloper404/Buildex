@@ -35,7 +35,7 @@ export class PriceEngineController {
       req.context.tenantId!,
       materialId,
       city,
-      limit ? parseInt(limit) : 50,
+      limit ? (parseInt(limit, 10) || 50) : 50,
     );
   }
 

@@ -3,6 +3,7 @@ import { Pool } from 'pg';
 import { PG_POOL } from '../database/database.module';
 import { Rfq, RfqCreate, RfqUpdate, RfqItem, SupplierInvite, RfqStatus } from '@buildex/shared';
 import { EmailService } from '../email/email.service';
+import { AuditLogService } from '../audit-log/audit-log.service';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 import * as bcrypt from 'bcrypt';
@@ -12,6 +13,7 @@ export class RfqService {
   constructor(
     @Inject(PG_POOL) private readonly pool: Pool,
     private readonly emailService: EmailService,
+    private readonly auditLog: AuditLogService,
     private readonly configService: ConfigService,
   ) {}
 
@@ -32,13 +34,14 @@ export class RfqService {
     return this.mapRfqRow(result.rows[0]);
   }
 
-  async findItems(rfqId: string): Promise<RfqItem[]> {
+  async findItems(rfqId: string, tenantId: string): Promise<RfqItem[]> {
     const result = await this.pool.query(
-      `SELECT ri.*, m.canonical_name as material_name, m.unit 
-       FROM rfq_items ri 
-       JOIN materials m ON ri.material_id = m.id 
+      `SELECT ri.*, m.canonical_name as material_name, m.unit
+       FROM rfq_items ri
+       JOIN materials m ON ri.material_id = m.id
+       JOIN rfqs r ON ri.rfq_id = r.id AND r.tenant_id = $2
        WHERE ri.rfq_id = $1`,
-      [rfqId]
+      [rfqId, tenantId]
     );
     return result.rows.map(row => ({
       id: row.id,
@@ -51,7 +54,7 @@ export class RfqService {
     }));
   }
 
-  async create(tenantId: string, data: RfqCreate): Promise<Rfq> {
+  async create(tenantId: string, data: RfqCreate, actorUserId?: string): Promise<Rfq> {
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
@@ -72,6 +75,10 @@ export class RfqService {
       }
 
       await client.query('COMMIT');
+      this.auditLog.log({
+        tenantId, actorUserId, action: 'create', entityType: 'rfq', entityId: rfq.id,
+        metadata: { projectName: rfq.projectName, deliveryCity: rfq.deliveryCity },
+      }).catch(() => {});
       return rfq;
     } catch (error) {
       await client.query('ROLLBACK');
@@ -81,7 +88,7 @@ export class RfqService {
     }
   }
 
-  async update(id: string, tenantId: string, data: RfqUpdate): Promise<Rfq> {
+  async update(id: string, tenantId: string, data: RfqUpdate, actorUserId?: string): Promise<Rfq> {
     const existing = await this.findById(id, tenantId);
     if (!existing) {
       throw new NotFoundException('RFQ not found');
@@ -115,10 +122,14 @@ export class RfqService {
     values.push(id, tenantId);
     const query = `UPDATE rfqs SET ${updates.join(', ')} WHERE id = $${paramIndex++} AND tenant_id = $${paramIndex} RETURNING *`;
     const result = await this.pool.query(query, values);
+    this.auditLog.log({
+      tenantId, actorUserId, action: 'update', entityType: 'rfq', entityId: id,
+      metadata: data,
+    }).catch(() => {});
     return this.mapRfqRow(result.rows[0]);
   }
 
-  async delete(id: string, tenantId: string): Promise<void> {
+  async delete(id: string, tenantId: string, actorUserId?: string): Promise<void> {
     const existing = await this.findById(id, tenantId);
     if (!existing) {
       throw new NotFoundException('RFQ not found');
@@ -129,9 +140,12 @@ export class RfqService {
     }
 
     await this.pool.query('DELETE FROM rfqs WHERE id = $1 AND tenant_id = $2', [id, tenantId]);
+    this.auditLog.log({
+      tenantId, actorUserId, action: 'delete', entityType: 'rfq', entityId: id,
+    }).catch(() => {});
   }
 
-  async sendRfq(id: string, tenantId: string, supplierIds: string[]): Promise<{ invites: SupplierInvite[] }> {
+  async sendRfq(id: string, tenantId: string, supplierIds: string[], actorUserId?: string): Promise<{ invites: SupplierInvite[] }> {
     const rfq = await this.findById(id, tenantId);
     if (!rfq) {
       throw new NotFoundException('RFQ not found');
@@ -141,18 +155,17 @@ export class RfqService {
       throw new BadRequestException('RFQ already sent');
     }
 
-    // Verify suppliers exist and belong to tenant
-    const suppliers: Array<{ id: string; email: string; name: string }> = [];
-    for (const supplierId of supplierIds) {
-      const supplierResult = await this.pool.query(
-        'SELECT id, email, name FROM suppliers WHERE id = $1 AND tenant_id = $2',
-        [supplierId, tenantId]
-      );
-      if (supplierResult.rows.length === 0) {
-        throw new NotFoundException(`Supplier ${supplierId} not found`);
-      }
-      suppliers.push(supplierResult.rows[0]);
+    // Verify suppliers exist and belong to tenant in a single query
+    const suppliersResult = await this.pool.query(
+      'SELECT id, email, name FROM suppliers WHERE id = ANY($1) AND tenant_id = $2',
+      [supplierIds, tenantId]
+    );
+    if (suppliersResult.rows.length !== supplierIds.length) {
+      const foundIds = new Set(suppliersResult.rows.map((r: any) => r.id));
+      const missing = supplierIds.find(id => !foundIds.has(id));
+      throw new NotFoundException(`Supplier ${missing} not found`);
     }
+    const suppliers: Array<{ id: string; email: string; name: string }> = suppliersResult.rows;
 
     const client = await this.pool.connect();
     try {
@@ -165,13 +178,15 @@ export class RfqService {
       const webUrl = this.configService.get('WEB_URL', 'http://localhost:3100');
 
       for (const supplier of suppliers) {
-        // Generate secure token
+        // Generate secure token: first 16 chars are the plain-text selector (indexed lookup),
+        // the full token is bcrypt-hashed for verification.
         const token = crypto.randomBytes(32).toString('hex');
+        const tokenSelector = token.slice(0, 16);
         const tokenHash = await bcrypt.hash(token, 10);
 
         const result = await client.query(
-          'INSERT INTO supplier_invites (rfq_id, supplier_id, token_hash, expires_at, status) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-          [id, supplier.id, tokenHash, expiresAt, 'pending']
+          'INSERT INTO supplier_invites (rfq_id, supplier_id, token_hash, token_selector, expires_at, status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+          [id, supplier.id, tokenHash, tokenSelector, expiresAt, 'pending']
         );
         invites.push(this.mapInviteRow(result.rows[0]));
 
@@ -193,6 +208,10 @@ export class RfqService {
       );
 
       await client.query('COMMIT');
+      this.auditLog.log({
+        tenantId, actorUserId, action: 'send', entityType: 'rfq', entityId: id,
+        metadata: { supplierCount: suppliers.length, supplierIds },
+      }).catch(() => {});
       return { invites };
     } catch (error) {
       await client.query('ROLLBACK');
@@ -202,13 +221,14 @@ export class RfqService {
     }
   }
 
-  async findInvites(rfqId: string): Promise<SupplierInvite[]> {
+  async findInvites(rfqId: string, tenantId: string): Promise<SupplierInvite[]> {
     const result = await this.pool.query(
-      `SELECT si.*, s.name as supplier_name, s.email as supplier_email 
-       FROM supplier_invites si 
-       JOIN suppliers s ON si.supplier_id = s.id 
+      `SELECT si.*, s.name as supplier_name, s.email as supplier_email
+       FROM supplier_invites si
+       JOIN suppliers s ON si.supplier_id = s.id
+       JOIN rfqs r ON si.rfq_id = r.id AND r.tenant_id = $2
        WHERE si.rfq_id = $1`,
-      [rfqId]
+      [rfqId, tenantId]
     );
     return result.rows.map(row => this.mapInviteRow(row));
   }
@@ -230,7 +250,6 @@ export class RfqService {
       id: row.id,
       rfqId: row.rfq_id,
       supplierId: row.supplier_id,
-      tokenHash: row.token_hash,
       expiresAt: new Date(row.expires_at),
       status: row.status,
       createdAt: new Date(row.created_at),

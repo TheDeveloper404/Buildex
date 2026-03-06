@@ -45,7 +45,7 @@ export class AuditLogService {
     tenantId: string,
     options?: { entityType?: string; limit?: number; offset?: number },
   ): Promise<AuditLogEntry[]> {
-    const limit = options?.limit || 50;
+    const limit = Math.min(options?.limit || 50, 500);
     const offset = options?.offset || 0;
 
     let query = `SELECT * FROM audit_log WHERE tenant_id = $1`;

@@ -2,11 +2,15 @@ import { Injectable, Inject, NotFoundException, BadRequestException } from '@nes
 import { Pool } from 'pg';
 import { PG_POOL } from '../database/database.module';
 import { Offer, OfferItem, OfferCreate, PublicOfferSubmit, SupplierInvite } from '@buildex/shared';
+import { AuditLogService } from '../audit-log/audit-log.service';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class OffersService {
-  constructor(@Inject(PG_POOL) private readonly pool: Pool) {}
+  constructor(
+    @Inject(PG_POOL) private readonly pool: Pool,
+    private readonly auditLog: AuditLogService,
+  ) {}
 
   async findByRfqId(rfqId: string, tenantId: string): Promise<Offer[]> {
     const result = await this.pool.query(
@@ -42,60 +46,64 @@ export class OffersService {
   }
 
   async getRfqContextForToken(token: string): Promise<{ rfq: any; items: any[]; supplier: any } | null> {
-    // Find invite by token hash
-    const invites = await this.pool.query(
+    // Use the token selector (first 16 chars) for an indexed DB lookup,
+    // then bcrypt.compare only against the single matched row.
+    const tokenSelector = token.slice(0, 16);
+
+    const inviteResult = await this.pool.query(
       `SELECT si.*, s.name as supplier_name, s.email as supplier_email,
               r.id as rfq_id, r.project_name, r.delivery_city, r.desired_date
        FROM supplier_invites si
        JOIN suppliers s ON si.supplier_id = s.id
        JOIN rfqs r ON si.rfq_id = r.id
-       WHERE si.expires_at > NOW() AND si.status IN ('pending', 'opened')`
+       WHERE si.token_selector = $1
+         AND si.expires_at > NOW()
+         AND si.status IN ('pending', 'opened')`,
+      [tokenSelector]
     );
 
-    // Check token against each hash (not efficient for many invites, but secure)
-    for (const invite of invites.rows) {
-      const isMatch = await bcrypt.compare(token, invite.token_hash);
-      if (isMatch) {
-        // Update invite status to opened
-        await this.pool.query(
-          'UPDATE supplier_invites SET status = $1 WHERE id = $2',
-          ['opened', invite.id]
-        );
+    if (inviteResult.rows.length === 0) return null;
 
-        // Get RFQ items
-        const itemsResult = await this.pool.query(
-          `SELECT ri.*, m.canonical_name as material_name, m.unit
-           FROM rfq_items ri
-           JOIN materials m ON ri.material_id = m.id
-           WHERE ri.rfq_id = $1`,
-          [invite.rfq_id]
-        );
+    const invite = inviteResult.rows[0];
+    const isMatch = await bcrypt.compare(token, invite.token_hash);
+    if (!isMatch) return null;
 
-        return {
-          rfq: {
-            id: invite.rfq_id,
-            projectName: invite.project_name,
-            deliveryCity: invite.delivery_city,
-            desiredDate: invite.desired_date,
-          },
-          items: itemsResult.rows.map(row => ({
-            id: row.id,
-            materialId: row.material_id,
-            materialName: row.material_name,
-            unit: row.unit,
-            qty: parseFloat(row.qty),
-            notes: row.notes,
-          })),
-          supplier: {
-            id: invite.supplier_id,
-            name: invite.supplier_name,
-            email: invite.supplier_email,
-          },
-        };
-      }
-    }
+    // Update invite status to opened
+    await this.pool.query(
+      'UPDATE supplier_invites SET status = $1 WHERE id = $2',
+      ['opened', invite.id]
+    );
 
-    return null;
+    // Get RFQ items
+    const itemsResult = await this.pool.query(
+      `SELECT ri.*, m.canonical_name as material_name, m.unit
+       FROM rfq_items ri
+       JOIN materials m ON ri.material_id = m.id
+       WHERE ri.rfq_id = $1`,
+      [invite.rfq_id]
+    );
+
+    return {
+      rfq: {
+        id: invite.rfq_id,
+        projectName: invite.project_name,
+        deliveryCity: invite.delivery_city,
+        desiredDate: invite.desired_date,
+      },
+      items: itemsResult.rows.map(row => ({
+        id: row.id,
+        materialId: row.material_id,
+        materialName: row.material_name,
+        unit: row.unit,
+        qty: parseFloat(row.qty),
+        notes: row.notes,
+      })),
+      supplier: {
+        id: invite.supplier_id,
+        name: invite.supplier_name,
+        email: invite.supplier_email,
+      },
+    };
   }
 
   async submitPublicOffer(token: string, data: PublicOfferSubmit): Promise<Offer> {
@@ -172,7 +180,7 @@ export class OffersService {
     }
   }
 
-  async markWinningOffer(offerId: string, tenantId: string): Promise<Offer> {
+  async markWinningOffer(offerId: string, tenantId: string, actorUserId?: string): Promise<Offer> {
     const offer = await this.findById(offerId, tenantId);
     if (!offer) {
       throw new NotFoundException('Offer not found');
@@ -189,8 +197,12 @@ export class OffersService {
       'UPDATE offers SET is_winning_offer = TRUE WHERE id = $1 AND tenant_id = $2 RETURNING *',
       [offerId, tenantId]
     );
-
-    return this.mapOfferRow(result.rows[0]);
+    const winning = this.mapOfferRow(result.rows[0]);
+    this.auditLog.log({
+      tenantId, actorUserId, action: 'mark_winner', entityType: 'offer', entityId: offerId,
+      metadata: { rfqId: winning.rfqId, supplierId: winning.supplierId },
+    }).catch(() => {});
+    return winning;
   }
 
   async getComparisonData(rfqId: string, tenantId: string): Promise<any> {
@@ -207,15 +219,30 @@ export class OffersService {
     );
     const items = itemsResult.rows;
 
-    // Get offer items for all offers
-    const comparisonData: Array<Offer & { items: OfferItem[] }> = [];
-    for (const offer of offers) {
-      const offerItems = await this.findItems(offer.id);
-      comparisonData.push({
-        ...offer,
-        items: offerItems,
-      });
+    // Get offer items for all offers in a single query
+    const offerIds = offers.map(o => o.id);
+    const allItemsResult = await this.pool.query(
+      `SELECT oi.*, ri.qty as requested_qty, m.canonical_name as material_name, m.unit
+       FROM offer_items oi
+       JOIN rfq_items ri ON oi.rfq_item_id = ri.id
+       JOIN materials m ON ri.material_id = m.id
+       WHERE oi.offer_id = ANY($1)`,
+      [offerIds]
+    );
+
+    const itemsByOfferId = new Map<string, OfferItem[]>();
+    for (const row of allItemsResult.rows) {
+      const item = this.mapOfferItemRow(row);
+      if (!itemsByOfferId.has(row.offer_id)) {
+        itemsByOfferId.set(row.offer_id, []);
+      }
+      itemsByOfferId.get(row.offer_id)!.push(item);
     }
+
+    const comparisonData: Array<Offer & { items: OfferItem[] }> = offers.map(offer => ({
+      ...offer,
+      items: itemsByOfferId.get(offer.id) || [],
+    }));
 
     return {
       items: items.map(row => ({
