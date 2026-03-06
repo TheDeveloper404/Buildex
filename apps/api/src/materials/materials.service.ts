@@ -11,12 +11,18 @@ export class MaterialsService {
     private readonly auditLog: AuditLogService,
   ) {}
 
-  async findAll(tenantId: string): Promise<Material[]> {
-    const result = await this.pool.query(
-      'SELECT * FROM materials WHERE tenant_id = $1 ORDER BY canonical_name',
-      [tenantId]
-    );
-    return result.rows.map(row => this.mapMaterialRow(row));
+  async findAll(tenantId: string, page = 1, limit = 25): Promise<{ data: Material[]; total: number; page: number; limit: number }> {
+    const offset = (page - 1) * limit;
+    const [countResult, dataResult] = await Promise.all([
+      this.pool.query('SELECT COUNT(*) FROM materials WHERE tenant_id = $1', [tenantId]),
+      this.pool.query('SELECT * FROM materials WHERE tenant_id = $1 ORDER BY canonical_name LIMIT $2 OFFSET $3', [tenantId, limit, offset]),
+    ]);
+    return {
+      data: dataResult.rows.map(row => this.mapMaterialRow(row)),
+      total: parseInt(countResult.rows[0].count, 10),
+      page,
+      limit,
+    };
   }
 
   async findById(id: string, tenantId: string): Promise<Material | null> {

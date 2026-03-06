@@ -6,3 +6,4 @@ export * from './schemas/rfq';
 export * from './schemas/offers';
 export * from './schemas/price';
 export * from './schemas/alerts';
+export * from './schemas/password';

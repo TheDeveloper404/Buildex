@@ -13,27 +13,35 @@ interface Supplier {
   city: string | null
 }
 
+const PAGE_SIZE = 25
+
 export default function SuppliersPage() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
+  const [initialLoad, setInitialLoad] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [formData, setFormData] = useState({ name: '', email: '', phone: '', city: '' })
 
   useEffect(() => {
-    fetchSuppliers()
-  }, [])
+    fetchSuppliers(page)
+  }, [page])
 
-  const fetchSuppliers = async () => {
+  const fetchSuppliers = async (p: number) => {
+    setLoading(true)
     try {
-      const response = await apiFetch('/api/suppliers')
+      const response = await apiFetch(`/api/suppliers?page=${p}&limit=${PAGE_SIZE}`)
       if (response.ok) {
-        const data = await response.json()
-        setSuppliers(data)
+        const result = await response.json()
+        setSuppliers(result.data)
+        setTotal(result.total)
       }
     } catch (error) {
       console.error('Failed to fetch suppliers:', error)
     } finally {
       setLoading(false)
+      setInitialLoad(false)
     }
   }
 
@@ -52,7 +60,7 @@ export default function SuppliersPage() {
       if (response.ok) {
         setFormData({ name: '', email: '', phone: '', city: '' })
         setShowForm(false)
-        fetchSuppliers()
+        fetchSuppliers(page)
       } else {
         const err = await response.json().catch(() => null)
         alert('Eroare la salvare: ' + (err?.message || response.statusText))
@@ -62,7 +70,7 @@ export default function SuppliersPage() {
     }
   }
 
-  if (loading) {
+  if (initialLoad) {
     return (
       <div className="min-h-screen bg-slate-50">
         <Nav />
@@ -84,7 +92,7 @@ export default function SuppliersPage() {
         <div className="flex justify-between items-center mb-6">
           <div>
             <h1 className="text-2xl font-bold text-slate-900">Furnizori</h1>
-            <p className="text-slate-500 text-sm mt-1">{suppliers.length} furnizori înregistrați</p>
+            <p className="text-slate-500 text-sm mt-1">{total} furnizori înregistrați</p>
           </div>
           <button
             onClick={() => setShowForm(!showForm)}
@@ -189,13 +197,40 @@ export default function SuppliersPage() {
               ))}
             </tbody>
           </table>
-          {suppliers.length === 0 && (
+          {suppliers.length === 0 && !loading && (
             <div className="px-5 py-16 text-center">
               <span className="text-4xl mb-4 block">🏢</span>
               <p className="text-slate-500 text-sm">Nu există furnizori. Adaugă primul furnizor folosind butonul de mai sus.</p>
             </div>
           )}
         </div>
+
+        {total > PAGE_SIZE && (
+          <div className="flex items-center justify-between mt-4">
+            <p className="text-sm text-slate-500">
+              {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} din {total}
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page === 1}
+                className="px-3 py-1.5 text-sm border border-slate-200 rounded-lg disabled:opacity-40 hover:bg-slate-50"
+              >
+                ← Anterior
+              </button>
+              <span className="px-3 py-1.5 text-sm text-slate-600">
+                Pagina {page} din {Math.ceil(total / PAGE_SIZE)}
+              </span>
+              <button
+                onClick={() => setPage(p => p + 1)}
+                disabled={page * PAGE_SIZE >= total}
+                className="px-3 py-1.5 text-sm border border-slate-200 rounded-lg disabled:opacity-40 hover:bg-slate-50"
+              >
+                Următor →
+              </button>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   )

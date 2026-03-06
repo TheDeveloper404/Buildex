@@ -141,25 +141,44 @@ export class PriceEngineService {
     };
   }
 
-  async getPriceHistory(tenantId: string, materialId: string, city?: string, limit: number = 50): Promise<PriceHistory[]> {
+  async getPriceHistory(tenantId: string, materialId: string, city?: string, limit: number = 50, options?: { supplierId?: string; dateFrom?: Date; dateTo?: Date }): Promise<PriceHistory[]> {
     const cityFilter = city || null;
     
+    const params: any[] = [tenantId, materialId, cityFilter];
+    let whereClauses = `ph.tenant_id = $1 AND ph.material_id = $2 AND (ph.city = $3 OR ($3 IS NULL AND ph.city IS NULL))`;
+
+    if (options?.supplierId) {
+      params.push(options.supplierId);
+      whereClauses += ` AND ph.supplier_id = $${params.length}`;
+    }
+    if (options?.dateFrom) {
+      params.push(options.dateFrom);
+      whereClauses += ` AND ph.observed_at >= $${params.length}`;
+    }
+    if (options?.dateTo) {
+      params.push(options.dateTo);
+      whereClauses += ` AND ph.observed_at <= $${params.length}`;
+    }
+
+    params.push(limit);
+
     const result = await this.pool.query(
-      `SELECT ph.*, s.name as supplier_name
+      `SELECT ph.*, s.name as supplier_name, m.canonical_name as material_name, m.unit
        FROM price_history ph
        LEFT JOIN suppliers s ON ph.supplier_id = s.id
-       WHERE ph.tenant_id = $1 
-       AND ph.material_id = $2 
-       AND (ph.city = $3 OR ($3 IS NULL AND ph.city IS NULL))
+       LEFT JOIN materials m ON ph.material_id = m.id
+       WHERE ${whereClauses}
        ORDER BY ph.observed_at DESC
-       LIMIT $4`,
-      [tenantId, materialId, cityFilter, limit]
+       LIMIT $${params.length}`,
+      params
     );
 
     return result.rows.map(row => ({
       id: row.id,
       tenantId: row.tenant_id,
       materialId: row.material_id,
+      materialName: row.material_name,
+      unit: row.unit,
       supplierId: row.supplier_id,
       supplierName: row.supplier_name,
       city: row.city,

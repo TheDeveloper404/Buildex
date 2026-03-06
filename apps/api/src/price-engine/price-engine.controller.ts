@@ -1,5 +1,5 @@
-import { Controller, Get, Post, Body, Query, Req, UseGuards } from '@nestjs/common';
-import { Request } from 'express';
+import { Controller, Get, Post, Body, Query, Req, Res, UseGuards } from '@nestjs/common';
+import { Request, Response } from 'express';
 import { PriceEngineService } from './price-engine.service';
 import { AuthGuard } from '../auth/auth.guard';
 import { RequestContext } from '../common/request-context';
@@ -27,6 +27,9 @@ export class PriceEngineController {
     @Query('materialId') materialId: string,
     @Query('city') city?: string,
     @Query('limit') limit?: string,
+    @Query('supplierId') supplierId?: string,
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
   ) {
     if (!materialId) {
       return { error: 'Material ID required' };
@@ -36,7 +39,57 @@ export class PriceEngineController {
       materialId,
       city,
       limit ? (parseInt(limit, 10) || 50) : 50,
+      {
+        supplierId: supplierId || undefined,
+        dateFrom: dateFrom ? new Date(dateFrom) : undefined,
+        dateTo: dateTo ? new Date(dateTo) : undefined,
+      },
     );
+  }
+
+  @Get('history/export')
+  async exportHistoryCsv(
+    @Req() req: Request & { context: RequestContext },
+    @Res() res: Response,
+    @Query('materialId') materialId: string,
+    @Query('city') city?: string,
+    @Query('supplierId') supplierId?: string,
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+  ) {
+    if (!materialId) {
+      res.status(400).json({ error: 'Material ID required' });
+      return;
+    }
+    const rows = await this.priceEngineService.getPriceHistory(
+      req.context.tenantId!,
+      materialId,
+      city,
+      10000,
+      {
+        supplierId: supplierId || undefined,
+        dateFrom: dateFrom ? new Date(dateFrom) : undefined,
+        dateTo: dateTo ? new Date(dateTo) : undefined,
+      },
+    );
+
+    const header = 'Data,Material,Furnizor,Oras,Pret Unitar,Moneda,Sursa';
+    const csvRows = rows.map((r: any) => [
+      new Date(r.observedAt).toISOString().slice(0, 10),
+      `"${(r.materialName || '').replace(/"/g, '""')}"`,
+      `"${(r.supplierName || '').replace(/"/g, '""')}"`,
+      `"${(r.city || '').replace(/"/g, '""')}"`,
+      r.unitPrice,
+      r.currency || 'RON',
+      r.source || '',
+    ].join(','));
+
+    const csv = [header, ...csvRows].join('\n');
+    // BOM for Excel UTF-8 compatibility
+    const bom = '\uFEFF';
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="istoric-preturi.csv"');
+    res.send(bom + csv);
   }
 
   @Post('history')

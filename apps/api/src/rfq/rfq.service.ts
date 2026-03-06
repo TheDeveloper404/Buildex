@@ -17,12 +17,18 @@ export class RfqService {
     private readonly configService: ConfigService,
   ) {}
 
-  async findAll(tenantId: string): Promise<Rfq[]> {
-    const result = await this.pool.query(
-      'SELECT * FROM rfqs WHERE tenant_id = $1 ORDER BY created_at DESC',
-      [tenantId]
-    );
-    return result.rows.map(row => this.mapRfqRow(row));
+  async findAll(tenantId: string, page = 1, limit = 25): Promise<{ data: Rfq[]; total: number; page: number; limit: number }> {
+    const offset = (page - 1) * limit;
+    const [countResult, dataResult] = await Promise.all([
+      this.pool.query('SELECT COUNT(*) FROM rfqs WHERE tenant_id = $1', [tenantId]),
+      this.pool.query('SELECT * FROM rfqs WHERE tenant_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3', [tenantId, limit, offset]),
+    ]);
+    return {
+      data: dataResult.rows.map(row => this.mapRfqRow(row)),
+      total: parseInt(countResult.rows[0].count, 10),
+      page,
+      limit,
+    };
   }
 
   async findById(id: string, tenantId: string): Promise<Rfq | null> {

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, Req, UseGuards, NotFoundException } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Query, Req, UseGuards, NotFoundException } from '@nestjs/common';
 import { Request } from 'express';
 import { SuppliersService } from './suppliers.service';
 import { AuthGuard } from '../auth/auth.guard';
@@ -10,8 +10,14 @@ export class SuppliersController {
   constructor(private readonly suppliersService: SuppliersService) {}
 
   @Get()
-  async findAll(@Req() req: Request & { context: RequestContext }) {
-    return this.suppliersService.findAll(req.context.tenantId!);
+  async findAll(
+    @Req() req: Request & { context: RequestContext },
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const p = Math.max(1, parseInt(page || '1', 10));
+    const l = Math.min(100, Math.max(1, parseInt(limit || '25', 10)));
+    return this.suppliersService.findAll(req.context.tenantId!, p, l);
   }
 
   @Get(':id')

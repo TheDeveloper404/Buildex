@@ -11,12 +11,18 @@ export class SuppliersService {
     private readonly auditLog: AuditLogService,
   ) {}
 
-  async findAll(tenantId: string): Promise<Supplier[]> {
-    const result = await this.pool.query(
-      'SELECT * FROM suppliers WHERE tenant_id = $1 ORDER BY name',
-      [tenantId]
-    );
-    return result.rows.map(row => this.mapSupplierRow(row));
+  async findAll(tenantId: string, page = 1, limit = 25): Promise<{ data: Supplier[]; total: number; page: number; limit: number }> {
+    const offset = (page - 1) * limit;
+    const [countResult, dataResult] = await Promise.all([
+      this.pool.query('SELECT COUNT(*) FROM suppliers WHERE tenant_id = $1', [tenantId]),
+      this.pool.query('SELECT * FROM suppliers WHERE tenant_id = $1 ORDER BY name LIMIT $2 OFFSET $3', [tenantId, limit, offset]),
+    ]);
+    return {
+      data: dataResult.rows.map(row => this.mapSupplierRow(row)),
+      total: parseInt(countResult.rows[0].count, 10),
+      page,
+      limit,
+    };
   }
 
   async findById(id: string, tenantId: string): Promise<Supplier | null> {

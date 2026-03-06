@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { apiFetch } from '@/lib/api'
+import { PASSWORD_RULES, validatePassword, passwordStrength } from '@buildex/shared'
 
 export default function SignupPage() {
   const router = useRouter()
@@ -17,12 +18,17 @@ export default function SignupPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
+  const strength = passwordStrength(formData.password)
+  const strengthLabel = ['Foarte slabă', 'Slabă', 'Medie', 'Bună', 'Puternică'][strength]
+  const strengthColor = ['bg-red-300', 'bg-red-500', 'bg-orange-400', 'bg-yellow-400', 'bg-green-500'][strength]
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
 
-    if (formData.password.length < 8) {
-      setError('Parola trebuie să aibă minim 8 caractere')
+    const pwErrors = validatePassword(formData.password)
+    if (pwErrors.length > 0) {
+      setError(pwErrors[0])
       return
     }
 
@@ -123,6 +129,27 @@ export default function SignupPage() {
                 className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                 placeholder="Minim 8 caractere"
               />
+              {formData.password.length > 0 && (
+                <div className="mt-2">
+                  <div className="flex gap-1 mb-1.5">
+                    {[1, 2, 3, 4].map((i) => (
+                      <div
+                        key={i}
+                        className={`h-1.5 flex-1 rounded-full transition-colors ${i <= strength ? strengthColor : 'bg-slate-200'}`}
+                      />
+                    ))}
+                  </div>
+                  <p className="text-xs text-slate-500 mb-1">Parolă: <span className="font-medium">{strengthLabel}</span></p>
+                  <ul className="space-y-0.5">
+                    {PASSWORD_RULES.map((rule) => (
+                      <li key={rule.key} className={`text-xs flex items-center gap-1.5 ${rule.test(formData.password) ? 'text-green-600' : 'text-slate-400'}`}>
+                        <span>{rule.test(formData.password) ? '✓' : '○'}</span>
+                        {rule.label}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
 
             <div>

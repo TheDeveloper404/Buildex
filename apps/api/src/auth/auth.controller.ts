@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Delete, Req, Res, HttpCode, HttpStatus, UnauthorizedException, ForbiddenException, BadRequestException, Body, Logger } from '@nestjs/common';
+import { Controller, Post, Get, Put, Delete, Req, Res, HttpCode, HttpStatus, UnauthorizedException, ForbiddenException, BadRequestException, Body, Logger } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { Request, Response } from 'express';
 import { ConfigService } from '@nestjs/config';
@@ -8,6 +8,7 @@ import { Inject } from '@nestjs/common';
 import { PG_POOL } from '../database/database.module';
 import { RequestContext } from '../common/request-context';
 import * as bcrypt from 'bcrypt';
+import { validatePassword } from '@buildex/shared';
 
 const SESSION_COOKIE_NAME = 'session_id';
 const SESSION_DURATION_DAYS = 7;
@@ -96,8 +97,9 @@ export class AuthController {
       throw new BadRequestException('All fields are required');
     }
 
-    if (body.password.length < 8) {
-      throw new BadRequestException('Password must be at least 8 characters');
+    const passwordErrors = validatePassword(body.password);
+    if (passwordErrors.length > 0) {
+      throw new BadRequestException(passwordErrors[0]);
     }
 
     // Check if tenant or email already exists (generic error to prevent enumeration)
@@ -269,6 +271,95 @@ export class AuthController {
     } finally {
       client.release();
     }
+  }
+
+  @Put('profile')
+  @HttpCode(HttpStatus.OK)
+  async updateProfile(
+    @Body() body: { name: string },
+    @Req() req: Request & { context: RequestContext },
+  ) {
+    if (!req.context.userId) {
+      throw new UnauthorizedException('Not authenticated');
+    }
+
+    if (!body.name || body.name.trim().length === 0) {
+      throw new BadRequestException('Numele este obligatoriu');
+    }
+
+    if (body.name.trim().length > 100) {
+      throw new BadRequestException('Numele nu poate depăși 100 de caractere');
+    }
+
+    const result = await this.pool.query(
+      'UPDATE users SET name = $1 WHERE id = $2 RETURNING id, tenant_id, email, name, role',
+      [body.name.trim(), req.context.userId],
+    );
+
+    if (result.rows.length === 0) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    const user = result.rows[0];
+    return {
+      id: user.id,
+      tenantId: user.tenant_id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+    };
+  }
+
+  @Post('change-password')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { ttl: 60000, limit: 5 } })
+  async changePassword(
+    @Body() body: { currentPassword: string; newPassword: string },
+    @Req() req: Request & { context: RequestContext },
+  ) {
+    if (!req.context.userId) {
+      throw new UnauthorizedException('Not authenticated');
+    }
+
+    if (!body.currentPassword || !body.newPassword) {
+      throw new BadRequestException('Parola curentă și parola nouă sunt obligatorii');
+    }
+
+    const passwordErrors = validatePassword(body.newPassword);
+    if (passwordErrors.length > 0) {
+      throw new BadRequestException(passwordErrors[0]);
+    }
+
+    // Fetch current password hash
+    const userResult = await this.pool.query(
+      'SELECT id, password_hash FROM users WHERE id = $1',
+      [req.context.userId],
+    );
+
+    if (userResult.rows.length === 0) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    const user = userResult.rows[0];
+
+    if (!user.password_hash) {
+      throw new BadRequestException('Contul nu are parolă configurată');
+    }
+
+    // Verify current password
+    const isValid = await bcrypt.compare(body.currentPassword, user.password_hash);
+    if (!isValid) {
+      throw new BadRequestException('Parola curentă este incorectă');
+    }
+
+    // Hash and save new password
+    const newHash = await bcrypt.hash(body.newPassword, 10);
+    await this.pool.query(
+      'UPDATE users SET password_hash = $1 WHERE id = $2',
+      [newHash, req.context.userId],
+    );
+
+    return { success: true, message: 'Parola a fost schimbată cu succes' };
   }
 
   @Post('logout')

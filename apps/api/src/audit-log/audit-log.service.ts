@@ -44,23 +44,33 @@ export class AuditLogService {
   async findByTenant(
     tenantId: string,
     options?: { entityType?: string; limit?: number; offset?: number },
-  ): Promise<AuditLogEntry[]> {
+  ): Promise<{ data: AuditLogEntry[]; total: number; limit: number; offset: number }> {
     const limit = Math.min(options?.limit || 50, 500);
     const offset = options?.offset || 0;
 
-    let query = `SELECT * FROM audit_log WHERE tenant_id = $1`;
+    let whereClause = `WHERE tenant_id = $1`;
     const params: any[] = [tenantId];
 
     if (options?.entityType) {
       params.push(options.entityType);
-      query += ` AND entity_type = $${params.length}`;
+      whereClause += ` AND entity_type = $${params.length}`;
     }
 
-    query += ` ORDER BY created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
-    params.push(limit, offset);
+    const countQuery = `SELECT COUNT(*) FROM audit_log ${whereClause}`;
+    const dataQuery = `SELECT * FROM audit_log ${whereClause} ORDER BY created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+    const dataParams = [...params, limit, offset];
 
-    const result = await this.pool.query(query, params);
-    return result.rows.map(this.mapRow);
+    const [countResult, dataResult] = await Promise.all([
+      this.pool.query(countQuery, params),
+      this.pool.query(dataQuery, dataParams),
+    ]);
+
+    return {
+      data: dataResult.rows.map(this.mapRow),
+      total: parseInt(countResult.rows[0].count, 10),
+      limit,
+      offset,
+    };
   }
 
   private mapRow(row: any): AuditLogEntry {

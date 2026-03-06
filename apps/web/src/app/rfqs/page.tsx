@@ -20,10 +20,15 @@ interface Rfq {
   createdAt: string
 }
 
+const PAGE_SIZE = 25
+
 export default function RfqsPage() {
   const [rfqs, setRfqs] = useState<Rfq[]>([])
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
   const [materials, setMaterials] = useState<Material[]>([])
   const [loading, setLoading] = useState(true)
+  const [initialLoad, setInitialLoad] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [formData, setFormData] = useState({
     projectName: '',
@@ -33,30 +38,36 @@ export default function RfqsPage() {
   })
 
   useEffect(() => {
-    fetchRfqs()
+    fetchRfqs(page)
+  }, [page])
+
+  useEffect(() => {
     fetchMaterials()
   }, [])
 
-  const fetchRfqs = async () => {
+  const fetchRfqs = async (p: number) => {
+    setLoading(true)
     try {
-      const response = await apiFetch('/api/rfqs')
+      const response = await apiFetch(`/api/rfqs?page=${p}&limit=${PAGE_SIZE}`)
       if (response.ok) {
-        const data = await response.json()
-        setRfqs(data)
+        const result = await response.json()
+        setRfqs(result.data)
+        setTotal(result.total)
       }
     } catch (error) {
       console.error('Failed to fetch RFQs:', error)
     } finally {
       setLoading(false)
+      setInitialLoad(false)
     }
   }
 
   const fetchMaterials = async () => {
     try {
-      const response = await apiFetch('/api/materials')
+      const response = await apiFetch('/api/materials?limit=1000')
       if (response.ok) {
-        const data = await response.json()
-        setMaterials(data)
+        const result = await response.json()
+        setMaterials(result.data)
       }
     } catch (error) {
       console.error('Failed to fetch materials:', error)
@@ -100,7 +111,7 @@ export default function RfqsPage() {
       if (response.ok) {
         setFormData({ projectName: '', deliveryCity: '', desiredDate: '', items: [] })
         setShowForm(false)
-        fetchRfqs()
+        fetchRfqs(page)
       } else {
         const err = await response.json().catch(() => null)
         alert('Eroare la creare: ' + (err?.message || response.statusText))
@@ -128,7 +139,7 @@ export default function RfqsPage() {
     }
   }
 
-  if (loading) {
+  if (initialLoad) {
     return (
       <div className="min-h-screen bg-slate-50">
         <Nav />
@@ -150,7 +161,7 @@ export default function RfqsPage() {
         <div className="flex justify-between items-center mb-6">
           <div>
             <h1 className="text-2xl font-bold text-slate-900">Cereri de Ofertă</h1>
-            <p className="text-slate-500 text-sm mt-1">{rfqs.length} cereri înregistrate</p>
+            <p className="text-slate-500 text-sm mt-1">{total} cereri înregistrate</p>
           </div>
           <button
             onClick={() => setShowForm(!showForm)}
@@ -329,13 +340,40 @@ export default function RfqsPage() {
               ))}
             </tbody>
           </table>
-          {rfqs.length === 0 && (
+          {rfqs.length === 0 && !loading && (
             <div className="px-5 py-16 text-center">
               <span className="text-4xl mb-4 block">📋</span>
               <p className="text-slate-500 text-sm">Nu există cereri de ofertă. Creează prima cerere folosind butonul de mai sus.</p>
             </div>
           )}
         </div>
+
+        {total > PAGE_SIZE && (
+          <div className="flex items-center justify-between mt-4">
+            <p className="text-sm text-slate-500">
+              {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} din {total}
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page === 1}
+                className="px-3 py-1.5 text-sm border border-slate-200 rounded-lg disabled:opacity-40 hover:bg-slate-50"
+              >
+                ← Anterior
+              </button>
+              <span className="px-3 py-1.5 text-sm text-slate-600">
+                Pagina {page} din {Math.ceil(total / PAGE_SIZE)}
+              </span>
+              <button
+                onClick={() => setPage(p => p + 1)}
+                disabled={page * PAGE_SIZE >= total}
+                className="px-3 py-1.5 text-sm border border-slate-200 rounded-lg disabled:opacity-40 hover:bg-slate-50"
+              >
+                Următor →
+              </button>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   )

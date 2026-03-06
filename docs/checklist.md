@@ -1,6 +1,6 @@
 # Buildex - Production Readiness Checklist
 
-> Ultima actualizare: 24 Feb 2026
+> Ultima actualizare: 06 Mar 2026
 
 ---
 
@@ -72,7 +72,7 @@
 - [ ] **Uptime monitoring** - Health checks externe
 
 ### Performanță
-- [ ] **Pagination** - Adăugare la toate listele (materials, suppliers, RFQs)
+- [x] **Pagination** - Adăugare la toate listele (materials, suppliers, RFQs, audit-log)
 - [ ] **Database indexing** - Analiză și adăugare index-uri
 - [ ] **Caching** - Redis caching pentru queries frecvente
 - [ ] **Image optimization** - Next.js Image component
@@ -104,7 +104,7 @@
 - [ ] **Service workers** - PWA capabilities
 
 ### Funcțional
-- [ ] **Export date** - CSV/Excel export
+- [x] **Export date** - CSV/Excel export (oferte + istoric prețuri)
 - [ ] **Import date** - Bulk import din CSV
 - [ ] **PDF generation** - Generare documente PDF
 - [ ] **Webhooks** - Notificări externe

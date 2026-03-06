@@ -10,8 +10,14 @@ export class MaterialsController {
   constructor(private readonly materialsService: MaterialsService) {}
 
   @Get()
-  async findAll(@Req() req: Request & { context: RequestContext }) {
-    return this.materialsService.findAll(req.context.tenantId!);
+  async findAll(
+    @Req() req: Request & { context: RequestContext },
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const p = Math.max(1, parseInt(page || '1', 10));
+    const l = Math.min(100, Math.max(1, parseInt(limit || '25', 10)));
+    return this.materialsService.findAll(req.context.tenantId!, p, l);
   }
 
   @Get('search')

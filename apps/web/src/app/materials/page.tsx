@@ -61,28 +61,36 @@ function translateSpecKey(key: string): string {
   return specKeyLabels[lower] || key.charAt(0).toUpperCase() + key.slice(1)
 }
 
+const PAGE_SIZE = 25
+
 export default function MaterialsPage() {
   const [materials, setMaterials] = useState<Material[]>([])
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
+  const [initialLoad, setInitialLoad] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [formData, setFormData] = useState({ canonicalName: '', unit: '' })
   const [specRows, setSpecRows] = useState<{ key: string; value: string }[]>([])
 
   useEffect(() => {
-    fetchMaterials()
-  }, [])
+    fetchMaterials(page)
+  }, [page])
 
-  const fetchMaterials = async () => {
+  const fetchMaterials = async (p: number) => {
+    setLoading(true)
     try {
-      const response = await apiFetch('/api/materials')
+      const response = await apiFetch(`/api/materials?page=${p}&limit=${PAGE_SIZE}`)
       if (response.ok) {
-        const data = await response.json()
-        setMaterials(data)
+        const result = await response.json()
+        setMaterials(result.data)
+        setTotal(result.total)
       }
     } catch (error) {
       console.error('Failed to fetch materials:', error)
     } finally {
       setLoading(false)
+      setInitialLoad(false)
     }
   }
 
@@ -122,7 +130,7 @@ export default function MaterialsPage() {
         setFormData({ canonicalName: '', unit: '' })
         setSpecRows([])
         setShowForm(false)
-        fetchMaterials()
+        fetchMaterials(page)
       } else {
         const err = await response.json().catch(() => null)
         console.error('Save failed:', err)
@@ -133,7 +141,7 @@ export default function MaterialsPage() {
     }
   }
 
-  if (loading) {
+  if (initialLoad) {
     return (
       <div className="min-h-screen bg-slate-50">
         <Nav />
@@ -155,7 +163,7 @@ export default function MaterialsPage() {
         <div className="flex justify-between items-center mb-6">
           <div>
             <h1 className="text-2xl font-bold text-slate-900">Materiale</h1>
-            <p className="text-slate-500 text-sm mt-1">{materials.length} materiale în catalog</p>
+            <p className="text-slate-500 text-sm mt-1">{total} materiale în catalog</p>
           </div>
           <button
             onClick={() => setShowForm(!showForm)}
@@ -293,13 +301,40 @@ export default function MaterialsPage() {
               ))}
             </tbody>
           </table>
-          {materials.length === 0 && (
+          {materials.length === 0 && !loading && (
             <div className="px-5 py-16 text-center">
               <span className="text-4xl mb-4 block">📦</span>
               <p className="text-slate-500 text-sm">Nu există materiale. Adaugă primul material folosind butonul de mai sus.</p>
             </div>
           )}
         </div>
+
+        {total > PAGE_SIZE && (
+          <div className="flex items-center justify-between mt-4">
+            <p className="text-sm text-slate-500">
+              {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} din {total}
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page === 1}
+                className="px-3 py-1.5 text-sm border border-slate-200 rounded-lg disabled:opacity-40 hover:bg-slate-50"
+              >
+                ← Anterior
+              </button>
+              <span className="px-3 py-1.5 text-sm text-slate-600">
+                Pagina {page} din {Math.ceil(total / PAGE_SIZE)}
+              </span>
+              <button
+                onClick={() => setPage(p => p + 1)}
+                disabled={page * PAGE_SIZE >= total}
+                className="px-3 py-1.5 text-sm border border-slate-200 rounded-lg disabled:opacity-40 hover:bg-slate-50"
+              >
+                Următor →
+              </button>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   )

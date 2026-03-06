@@ -106,12 +106,12 @@ export default function RfqDetailPage() {
   const fetchSuppliers = async () => {
     setLoadingSuppliers(true)
     try {
-      const response = await apiFetch('/api/suppliers')
+      const response = await apiFetch('/api/suppliers?limit=1000')
       if (response.ok) {
-        const data = await response.json()
-        setSuppliers(data)
+        const result = await response.json()
+        setSuppliers(result.data)
         // Pre-select all suppliers
-        setSelectedSuppliers(new Set(data.map((s: any) => s.id)))
+        setSelectedSuppliers(new Set(result.data.map((s: any) => s.id)))
       }
     } catch (err) {
       console.error('Failed to fetch suppliers:', err)
@@ -327,8 +327,29 @@ export default function RfqDetailPage() {
         {/* Offer Comparison */}
         {comparison && comparison.offers.length > 0 && (
           <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-            <div className="px-5 py-4 border-b border-slate-100">
+            <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center">
               <h2 className="text-base font-semibold text-slate-900">Comparație Oferte</h2>
+              <button
+                onClick={async () => {
+                  try {
+                    const res = await apiFetch(`/api/offers/rfq/${rfqId}/export`)
+                    if (res.ok) {
+                      const blob = await res.blob()
+                      const url = URL.createObjectURL(blob)
+                      const a = document.createElement('a')
+                      a.href = url
+                      a.download = `comparatie-oferte-${rfqId.slice(0, 8)}.csv`
+                      a.click()
+                      URL.revokeObjectURL(url)
+                    }
+                  } catch (err) {
+                    console.error('Export failed:', err)
+                  }
+                }}
+                className="px-3 py-1.5 text-sm border border-slate-200 rounded-lg hover:bg-slate-50 text-slate-600 font-medium transition-colors"
+              >
+                ↓ Export CSV
+              </button>
             </div>
             
             <div className="overflow-x-auto">
